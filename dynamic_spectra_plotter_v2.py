@@ -16,6 +16,8 @@ import seaborn as sns
 import numpy as np
 from astropy import units as u
 
+import soapy_power_test_v2 as spt
+
 def plot_dynamic_spectrum(file, n_x, n_y,file_format = "rtl_power"):
     """
     Plots a dynamic spectrum in the csv file "file". Imports file as
@@ -30,6 +32,7 @@ def plot_dynamic_spectrum(file, n_x, n_y,file_format = "rtl_power"):
     
     #getting parameters and data from dataframe
     if file_format == "rtl_power":
+        #other file formats to be added
         date = dyn_spec_dataframe.iloc[0,0]
         f_lower = dyn_spec_dataframe.iloc[0,2]
         f_upper = dyn_spec_dataframe.iloc[0,3]
@@ -43,8 +46,7 @@ def plot_dynamic_spectrum(file, n_x, n_y,file_format = "rtl_power"):
         
         #putting axis right way round:
         data = data.T
-    #other file formats to be added
-    
+
     #x axis:
     
     #(note: n_x and n_y may not be exact number of ticks 
@@ -76,5 +78,9 @@ def plot_dynamic_spectrum(file, n_x, n_y,file_format = "rtl_power"):
     plt.ylabel("Frequency (MHz)")
     plt.xlabel("Time UTC " + date)
 
-file = "lime_specint0.06_15min.csv"
+#plotting entire dynamic spectrum:
+file = "lime_sat_spec30min.csv"
 plot_dynamic_spectrum(file,10,10)
+
+#plotting the nth power spectrum from the dynamic spectrum:
+spt.plot_power_spec([file],10,nth_power_spec = 0)    
