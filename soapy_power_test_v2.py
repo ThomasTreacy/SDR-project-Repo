@@ -10,6 +10,8 @@ This is a revision started on 18 10 22
 Data files must be in current working directory, must be csv file
 
 """
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy import units as u
@@ -22,7 +24,8 @@ def peak_finder(power,freq):
     Uses scipy.signal.find_peaks to find peaks in power array
     freq: array of freq values corresponding to power array
     """
-    peak_indices = find_peaks(power,prominence=(1))[0]
+    peak_indices = find_peaks(power,prominence=2)[0]
+    print("testing")
     #getting PSD values and freq of peaks:
     peak_freqs = []
     peak_values = []
@@ -65,23 +68,44 @@ def make_data_array(filename, nth_power_spec = 0,file_format = "rtl_power"):
     data = np.array(data)
     return data, f_lower, f_upper
 
-def remove_dcoffset_and_sides(power,freq):
+def poly_order_3(x,c,d,e,f):
     """
-    This function returns array that is the input array with the central values replaced
-    with average value of entire array, and values at edge of input array are cut off 
-    to remove side artefacts
+    Cubic function for curve ftting
+    """
+    return c*x**3 + d*x**2 + e*x + f
+
+def remove_dcoffset_and_sides(power,freq,func="cubic"):
+    """
+    This function returns array that is the input array with the central values replaced,
+    to remove DC spike, and values at edge of input array cut off to remove side artefacts
     power: array of PSD values
     freq: array of freq values corresponding to "power"
+    func: kind of fitting function used to replace DC spike, either cubic or linear
     """
-    num = 10#size of interval
-    #removing DC spike
-    av = np.average(power)
+    
+    num = 20#size of interval
+    #defining dc spike region:
     lower = int(len(power)/2 - num)
     upper = int(len(power)/2 + num)
-    power[lower:upper] = av
+    
+    #getting data points either side of DC spike gap
+    num = 15
+    power2 = power[lower - num:lower]
+    power3 = power[upper:upper + num]
+    freq2 = freq[lower - num:lower]
+    freq3 = freq[upper:upper + num]
+    power4 = np.concatenate([power2,power3])
+    freq4 = np.concatenate([freq2,freq3])
+    if func == "linear":
+        power[lower:upper] = np.average(power4)
+    else:
+        pars = curve_fit(poly_order_3,freq4,power4)[0]
+        gap = poly_order_3(freq[lower:upper],pars[0],pars[1],pars[2],pars[3])  
+        power[lower:upper] = gap
+    
     
     #removing side artefacts
-    num = 10
+    num = 15
     lower = num
     upper = int(len(power) - num)
     power = power[lower:upper] 
@@ -89,23 +113,23 @@ def remove_dcoffset_and_sides(power,freq):
     
     return power, freq
 
-def plot_power_spec(paths,n_x,peaks = True,xlims = None ,norm = False,nth_power_spec = 0):  
+def plot_power_spec(paths,peakfinder = True,norm = False,nth_power_spec = 0,title=0,removespike=True):  
     """
     This function plots either: 
     a)power spectra in csv files that are specfied in the list "paths".
-    b)the nth power spectra of any power spectra saved in csv files specified in list "paths"
+    b)the nth power spectra of a dynamic spectrum saved in csv files specified in list "paths"
     (Can't mix power spectra files and dynamic spectra files in one list)
     Assumes all spectra have same freq. range when setting axes.
-    n_x : number of x axis ticks
-    xlims: list length 2 to specify x axis limits in Mhz
     "norm":toggles normalizing all spectra with respect to peak PSD value
-    "nth_power_spec":plots the nth row of the dataframe, applied to any files in list "paths" that contain dynamic spectrum
-    peaks: toggles peak finding
+    "nth_power_spec":plots the nth row of the dataframe, applied when files in list "paths" that contain dynamic spectum
+    peakfinder: toggles peak finding
+    title: if not specified, title of plot is first file in paths
+    removespike: toggle removing dc spike and side artefacts
     """
     #setting figure size
     f = plt.figure()
-    f.set_figwidth(12)
-    f.set_figheight(6.75)
+    f.set_figwidth(16)
+    f.set_figheight(9)
     
     #getting data from file and plotting spectrum
     for file in paths:
@@ -118,55 +142,51 @@ def plot_power_spec(paths,n_x,peaks = True,xlims = None ,norm = False,nth_power_
         freq = np.linspace(f_lower,f_upper,len(power))
         
         #removing dc offset and side artefacts:
-        power,freq = remove_dcoffset_and_sides(power,freq)
+        if removespike == True:
+            power,freq = remove_dcoffset_and_sides(power,freq,func="cubic")
         
         #normalisation:
-        if norm:
+        if norm == True:
             max_val = abs(max(power))
             power = np.array(power)/max_val
             
         #peak finder function
-        if peaks == True:
-            print("\n",file + " peaks")
+        if peakfinder == True:
             peaks = peak_finder(power,freq)
-        
             #plotting peaks found in peak finder function:
             x = peaks[0]
             y = peaks[1]
             for i in range(len(x)):
                 #freqs in x are in Hz - converting to Mhz for labelling
-                x_label = str(round(x[i]/1e6,3)*u.MHz)
+                x_label = str(np.round(x[i]/1e6,2)*u.MHz)
                 plt.text(x[i],y[i],x_label + "\n" + str(y[i]))
         
         #plotting spectrum:
-        plt.plot(freq,power, alpha = 0.8)
+        plt.plot(freq,power, alpha = 0.7)
    
     #setting x ticks and labels:
+    n_x = 9
     xticks_array = np.linspace(f_lower,f_upper,n_x)
     
     #rounding values for labels:
     xlabels = []
     for i in xticks_array:
-        xlabels.append(round(i/1e6,2))
-     
-    xlabels = xlabels*u.MHz
+        xlabels.append(np.round(i/1e6,2)*u.MHz)
     
     #Plotting
     plt.xlabel("Frequency (MHz)")
     plt.ylabel("PSD (arbitrary units)")
     plt.xticks(xticks_array,xlabels)
-    plt.legend(paths,loc = "upper left")
-    if xlims:
-        plt.xlim((xlims[0],xlims[1]))
-    plt.title(paths[0])
-   
-paths = ["hack_sat3.csv"]
-plot_power_spec(paths,7)
+    plt.legend(paths,loc = "best")
+    #plt.legend(["HackRF One","LimeSDR mini"],loc = "best")
+    if title == 0:
+        title = paths[0]
+    plt.title(title)
+    plt.style.use("default")
+    
 
+if __name__ == "__main__":
+    paths = ["lime_sat1.csv"]
+    plot_power_spec(paths,peakfinder=True,removespike=True)
 
-
-
-
-            
-        
 
