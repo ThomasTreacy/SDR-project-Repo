@@ -17,19 +17,21 @@ import pandas as pd
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 import argparse
+import os
     
-def peak_finder(power,freq):
+def peak_finder(power,freq,n):
     """
     Uses scipy.signal.find_peaks to find peaks in power array
     freq: array of frequency values corresponding to power array
+    n: number of peaks to plot
     """
     peak_indices = find_peaks(power,prominence=1)[0]
     #getting PSD values and frequencies of peaks:
     peak_values = np.array(power[peak_indices])
     peak_freqs = np.array(freq[peak_indices])
     
-    #getting 15 highest peaks, so graphs aren't too cluttered
-    indices = np.argsort(peak_values)[-15:]
+    #getting n highest peaks, so graphs aren't too cluttered
+    indices = np.argsort(peak_values)[-n:]
     peak_values = peak_values[indices]
     peak_freqs = peak_freqs[indices]
 
@@ -71,7 +73,7 @@ def make_data_array(filename, nth_power_spec = 0,file_format = "rtl_power"):
     print(filename)
     print("Timestamp:", date + timestamp)
     print("freq. range:",f_lower,f_upper)
-    print("Bin size:",bin_size/1e3,"kHz")
+    print("Bin size:",np.round(bin_size/1e3,4), "kHz")
     print("Samples:",samples)
     print("\n")
     
@@ -82,21 +84,20 @@ def make_data_array(filename, nth_power_spec = 0,file_format = "rtl_power"):
 def poly_order_3(x,c,d,e,f):
     return c*x**3 + d*x**2 + e*x + f
 
-def remove_dcoffset(power,freq,func="cubic"):
+def remove_dcoffset(power,freq,func="cubic",int_size = 20):
     """
     This function returns array that is the input array with the central values replaced,
     to remove DC spike.
     power: array of PSD values
     freq: array of freq values corresponding to "power"
+    int_size: size of central interval to remove
     """
-    num = 20#size of central interval to remove
-    #removing DC spike
     #defining interval :
-    lower = int(len(power)/2 - num)
-    upper = int(len(power)/2 + num)
+    lower = int(len(power)/2 - int_size)
+    upper = int(len(power)/2 + int_size)
     
     #interpolating across gap:
-    num = 200#num of points either side of gap to perform fitting on
+    num = 20#num of points either side of gap to perform fitting on
     #getting data points either side of DC spike gap
     power2 = power[lower - num:lower]
     power3 = power[upper:upper + num]
@@ -139,10 +140,8 @@ def plot_power_spec(paths,peakfinder = True,norm = False,nth_power_spec = 0,titl
     removespike: toggles removing DC spike and side artefacts
     """
     #setting figure size
-    f = plt.figure()
-    f.set_figwidth(16)
-    f.set_figheight(9)
-    
+    f = plt.figure(figsize = [14,8],dpi = 200)
+
     #getting data from file and plotting spectrum
     for file in paths:
         
@@ -165,8 +164,8 @@ def plot_power_spec(paths,peakfinder = True,norm = False,nth_power_spec = 0,titl
             power = np.array(power)/max_val
             
         #peak finder function
-        if peakfinder == True:
-            peak_freqs,peak_values = peak_finder(power,freq)
+        if peakfinder == True and file == 'lime_sun6.csv':
+            peak_freqs,peak_values = peak_finder(power,freq,n = 13)
             #plotting peaks found in peak finder function:
             plot_peaks(peak_freqs, peak_values)
         
@@ -188,15 +187,23 @@ def plot_power_spec(paths,peakfinder = True,norm = False,nth_power_spec = 0,titl
     plt.xlabel("Frequency (MHz)")
     plt.ylabel("PSD (arbitrary units)")
     plt.xticks(xticks_array,xlabels)
-    plt.legend(paths,loc = "best")
-    #plt.legend(["HackRF One","LimeSDR mini"],loc = "best")
+    #plt.legend(paths,loc = "best")
+    plt.legend(["HackRF One","LimeSDR mini"],loc = "best")
     if title == 0:
         title = paths[0]
     plt.title(title)
     plt.style.use("default")
     plt.grid()
     plt.show()
+    
+if __name__ == "__main__":
+    os.chdir("F:/SDR backup/SDR_data_files/Week6")
+    p1 = "hack_sun1.csv"
+    p2 = "lime_sun6.csv"
+    plot_power_spec([p1,p2],peakfinder=True,removespike=True,nth_power_spec = 0)
+    
 
+#%%
 #argument parsing:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
